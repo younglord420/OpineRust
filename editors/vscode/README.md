@@ -1,5 +1,13 @@
 # Pine Script for VS Code
 
+> **Not part of the OpineRust distribution.** This extension is the upstream
+> Pinecone extension and remains here for attribution and continuity. Its
+> marketplace listing and publisher belong to the upstream project. Its
+> auto-download path fetches binaries from upstream Pinecone releases, so
+> installing through it does not install an OpineRust build. Point
+> `pinecone.server.path` at a locally built binary if you want to use the
+> OpineRust runtime with it.
+
 Language support for [TradingView Pine Script](https://www.tradingview.com/pine-script-docs/),
 powered by the [`pinecone`](https://github.com/ferranbt/pinecone) toolchain.
 
@@ -27,11 +35,8 @@ The extension talks to the `pinecone` language server. If it isn't found, the
 extension offers to **download** it for you. Otherwise, make it available by
 either:
 
-- putting a `pinecone` binary on your `PATH` (install it with
-  [`up.sh`](https://github.com/ferranbt/pinecone#pinecone-binary), download a
-  prebuilt one from the
-  [releases](https://github.com/ferranbt/pinecone/releases), or build it with
-  `cargo build --release -p pinecone`), **or**
+- putting a `pinecone` binary on your `PATH` (build it with
+  `cargo build --release -p pinecone` from this repository), **or**
 - pointing the extension at it with the `pinecone.server.path` setting.
 
 ## Extension settings

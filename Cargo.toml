@@ -3,8 +3,8 @@ version = "0.2.6"
 edition = "2021"
 rust-version = "1.83"
 license = "MPL-2.0"
-repository = "https://github.com/ferranbt/pinecone"
-homepage = "https://github.com/ferranbt/pinecone"
+repository = "https://github.com/younglord420/OpineRust"
+homepage = "https://github.com/younglord420/OpineRust"
 
 [workspace]
 members = [
@@ -56,4 +56,8 @@ chrono = { version = "0.4", default-features = false, features = ["std"] }
 chrono-tz = "0.10"
 csv = "1.3"
 ureq = { version = "2.10", features = ["json"] }
-ahash = "0.8"
+# `ahash`'s default `runtime-rng` feature pulls `getrandom`, which refuses to
+# build for `wasm32-unknown-unknown` without the `wasm_js` configuration. The
+# crate that consumes it picks the RNG feature per target; see
+# `crates/pine-interpreter/Cargo.toml`.
+ahash = { version = "0.8", default-features = false, features = ["std"] }

@@ -1,0 +1,17 @@
+OpineRust Runtime
+=================
+
+This product includes software from Pinecone (https://github.com/ferranbt/pinecone),
+Copyright ferranbt and Pinecone contributors, licensed under the Mozilla Public
+License 2.0 (MPL-2.0). See LICENSE in this repository.
+
+OpineRust Runtime is an Oracly product built from that codebase. It is not an official
+TradingView product and is not affiliated with or endorsed by TradingView.
+Pine Script is a registered trademark of TradingView.
+
+Source availability: the corresponding source for a distributed build is this
+repository at the commit recorded in that build's metadata, or the archive supplied
+with the distribution. MPL-2.0 requires that recipients of a distributed build can
+obtain the source of the MPL-covered files in that build.
+
+Initial upstream commit: 7bb739d771f804ef6e0352bb85b517fcf610594e

@@ -14,7 +14,18 @@ pine-core = { workspace = true }
 pine-parser = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
-ahash = { workspace = true }
+# `ahash` seeds its `RandomState` from the OS by default (`runtime-rng` →
+# `getrandom`), and `getrandom` refuses to build for `wasm32-unknown-unknown`
+# unless the `wasm_js` configuration is set. Our maps are internal indexes, not
+# security boundaries, so `no-rng` gives the hasher a per-instance
+# counter/address seed on every target; native additionally keeps the OS seed
+# through `runtime-rng`. `compile-time-rng` is deliberately not used: it needs
+# network access at build time through `const-random`.
+ahash = { workspace = true, default-features = false, features = ["std", "no-rng"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies.ahash]
+version = "0.8"
+features = ["runtime-rng"]
 
 [dev-dependencies]
 eyre = { workspace = true }

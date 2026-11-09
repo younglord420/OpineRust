@@ -12,12 +12,29 @@ path = "integration.rs"
 name = "corpus"
 path = "corpus.rs"
 
+[[test]]
+name = "wasm_runtime"
+path = "wasm_runtime.rs"
+
 [dependencies]
-pine-lang.workspace = true
-pine-interpreter.workspace = true
 pine-core.workspace = true
+pine-interpreter.workspace = true
+pine-lexer.workspace = true
+pine-parser.workspace = true
+pine-sema.workspace = true
+pine-builtins.workspace = true
+pine-diagnostics.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+# `pine-data` reaches `ureq` -> `ring` -> `getrandom`, which cannot build for
+# `wasm32-unknown-unknown`. The bridge avoids that path for the same reason, so
+# the WASM runtime test links only the core crates above. Keep these native-only.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+pine-lang.workspace = true
 pine-data.workspace = true
 eyre.workspace = true
 walkdir = "2"
-serde.workspace = true
-serde_json.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "=0.3.80"
