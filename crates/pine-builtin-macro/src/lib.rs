@@ -862,7 +862,13 @@ fn generate_value_conversion(
     } else if type_str.contains("bool") {
         quote! { arg_value.as_bool()? }
     } else if type_str.contains("Color") {
-        quote! { arg_value.as_color()? }
+        quote! {
+            if matches!(arg_value, Value::Na) {
+                pine_core::Color::new(0, 0, 0, 100)
+            } else {
+                arg_value.as_color()?
+            }
+        }
     } else if type_str.contains("Value") {
         quote! { arg_value }
     } else {

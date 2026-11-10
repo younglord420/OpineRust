@@ -459,6 +459,7 @@ impl<O: PineOutput> Value<O> {
     pub fn as_color(&self) -> Result<Color, RuntimeError> {
         match self {
             Value::Color(color) => Ok(color.clone()),
+            Value::Na => Ok(Color::new(0, 0, 0, 100)),
             Value::String(s) => {
                 if let Some(color) = parse_hex_color(s) {
                     Ok(color)

@@ -12,6 +12,9 @@ struct ColorNew<O: PineOutput> {
 
 impl<O: PineOutput> ColorNew<O> {
     fn execute(&self, _ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
+        if matches!(self.color, Value::Na) {
+            return Ok(Value::Na);
+        }
         let mut color = self.color.as_color()?;
         color.t = self.transp.clamp(0.0, 100.0) as u8;
         Ok(Value::Color(color))
@@ -48,6 +51,9 @@ struct ColorR<O: PineOutput> {
 
 impl<O: PineOutput> ColorR<O> {
     fn execute(&self, _ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
+        if matches!(self.color, Value::Na) {
+            return Ok(Value::Na);
+        }
         let color = self.color.as_color()?;
         Ok(Value::Number(color.r as f64))
     }
@@ -62,6 +68,9 @@ struct ColorG<O: PineOutput> {
 
 impl<O: PineOutput> ColorG<O> {
     fn execute(&self, _ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
+        if matches!(self.color, Value::Na) {
+            return Ok(Value::Na);
+        }
         let color = self.color.as_color()?;
         Ok(Value::Number(color.g as f64))
     }
@@ -76,6 +85,9 @@ struct ColorB<O: PineOutput> {
 
 impl<O: PineOutput> ColorB<O> {
     fn execute(&self, _ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
+        if matches!(self.color, Value::Na) {
+            return Ok(Value::Na);
+        }
         let color = self.color.as_color()?;
         Ok(Value::Number(color.b as f64))
     }
@@ -90,6 +102,9 @@ struct ColorT<O: PineOutput> {
 
 impl<O: PineOutput> ColorT<O> {
     fn execute(&self, _ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
+        if matches!(self.color, Value::Na) {
+            return Ok(Value::Na);
+        }
         let color = self.color.as_color()?;
         Ok(Value::Number(color.t as f64))
     }
@@ -109,6 +124,9 @@ struct ColorFromGradient<O: PineOutput> {
 
 impl<O: PineOutput> ColorFromGradient<O> {
     fn execute(&self, _ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
+        if matches!(self.bottom_color, Value::Na) || matches!(self.top_color, Value::Na) {
+            return Ok(Value::Na);
+        }
         let c1 = self.bottom_color.as_color()?;
         let c2 = self.top_color.as_color()?;
 
