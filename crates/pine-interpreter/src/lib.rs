@@ -459,11 +459,48 @@ impl<O: PineOutput> Value<O> {
     pub fn as_color(&self) -> Result<Color, RuntimeError> {
         match self {
             Value::Color(color) => Ok(color.clone()),
+            Value::String(s) => {
+                if let Some(color) = parse_hex_color(s) {
+                    Ok(color)
+                } else {
+                    Err(RuntimeError::TypeError(format!(
+                        "Expected color, got String(\"{}\")",
+                        s
+                    )))
+                }
+            }
             _ => Err(RuntimeError::TypeError(format!(
                 "Expected color, got {:?}",
                 self
             ))),
         }
+    }
+}
+
+fn parse_hex_color(s: &str) -> Option<Color> {
+    let hex = s.strip_prefix('#')?;
+    match hex.len() {
+        6 => {
+            let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+            let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+            let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+            Some(Color::new(r, g, b, 0))
+        }
+        8 => {
+            let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+            let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+            let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+            let alpha = u8::from_str_radix(&hex[6..8], 16).ok()?;
+            let t = (100 - (alpha as u16 * 100 / 255)).min(100) as u8;
+            Some(Color::new(r, g, b, t))
+        }
+        3 => {
+            let r = u8::from_str_radix(&hex[0..1], 16).ok()? * 17;
+            let g = u8::from_str_radix(&hex[1..2], 16).ok()? * 17;
+            let b = u8::from_str_radix(&hex[2..3], 16).ok()? * 17;
+            Some(Color::new(r, g, b, 0))
+        }
+        _ => None,
     }
 }
 
@@ -1822,7 +1859,13 @@ impl<O: PineOutput> Interpreter<O> {
             Literal::String(s) => Value::String(s.clone()),
             Literal::Bool(b) => Value::Bool(*b),
             Literal::Na => Value::Na,
-            Literal::HexColor(hex) => Value::String(hex.clone()),
+            Literal::HexColor(hex) => {
+                if let Some(color) = parse_hex_color(hex) {
+                    Value::Color(color)
+                } else {
+                    Value::String(hex.clone())
+                }
+            }
         }
     }
 
