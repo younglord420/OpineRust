@@ -1144,35 +1144,81 @@ impl<O: PineOutput> Interpreter<O> {
                 ..
             } => {
                 let collection_value = self.eval_expr(collection)?;
-                let arr = collection_value.as_array()?;
-                let arr_borrowed = arr.borrow();
+                match collection_value {
+                    Value::Array(arr) => {
+                        let arr_borrowed = arr.borrow().clone();
+                        for (index, item) in arr_borrowed.into_iter().enumerate() {
+                            if let Some(idx_var) = index_var {
+                                self.bind(
+                                    idx_var.clone(),
+                                    Variable {
+                                        value: Value::Int(index as i64),
+                                        is_const: false,
+                                        is_var_persistent: false,
+                                    },
+                                );
+                            }
 
-                for (index, item) in arr_borrowed.iter().enumerate() {
-                    // Set index variable if tuple form
-                    if let Some(idx_var) = index_var {
-                        self.bind(
-                            idx_var.clone(),
-                            Variable {
-                                value: Value::Int(index as i64),
-                                is_const: false,
-                                is_var_persistent: false,
-                            },
-                        );
+                            self.bind(
+                                item_var.clone(),
+                                Variable {
+                                    value: item,
+                                    is_const: false,
+                                    is_var_persistent: false,
+                                },
+                            );
+
+                            let control = self.execute_loop_body(body)?;
+                            if control == LoopControl::Break {
+                                break;
+                            }
+                        }
                     }
+                    Value::Map { data, .. } => {
+                        let map_borrowed = data.borrow().clone();
+                        for (key, val) in map_borrowed {
+                            // Tuple form: for [key, value] in my_map
+                            // index_var is key, item_var is value
+                            if let Some(k_var) = index_var {
+                                self.bind(
+                                    k_var.clone(),
+                                    Variable {
+                                        value: key,
+                                        is_const: false,
+                                        is_var_persistent: false,
+                                    },
+                                );
+                                self.bind(
+                                    item_var.clone(),
+                                    Variable {
+                                        value: val,
+                                        is_const: false,
+                                        is_var_persistent: false,
+                                    },
+                                );
+                            } else {
+                                // Single variable form: for [key] in my_map
+                                self.bind(
+                                    item_var.clone(),
+                                    Variable {
+                                        value: key,
+                                        is_const: false,
+                                        is_var_persistent: false,
+                                    },
+                                );
+                            }
 
-                    // Set item variable
-                    self.bind(
-                        item_var.clone(),
-                        Variable {
-                            value: item.clone(),
-                            is_const: false,
-                            is_var_persistent: false,
-                        },
-                    );
-
-                    let control = self.execute_loop_body(body)?;
-                    if control == LoopControl::Break {
-                        break;
+                            let control = self.execute_loop_body(body)?;
+                            if control == LoopControl::Break {
+                                break;
+                            }
+                        }
+                    }
+                    other => {
+                        return Err(RuntimeError::TypeError(format!(
+                            "Expected array or map in for...in loop, got {:?}",
+                            other
+                        )));
                     }
                 }
 
