@@ -377,6 +377,18 @@ impl<O: PineOutput> Value<O> {
     /// This value as a [`Num`], preserving whether it is an int or a float, so
     /// callers can apply Pine's overload rule. `None` for `na` and for anything
     /// non-numeric.
+    /// A `line`/`box`/`label`/... handle. Builtins still read it as a number.
+    pub fn drawing_handle(kind: &str, id: usize) -> Self {
+        let mut fields = HashMap::new();
+        fields.insert("id".to_string(), Value::Number(id as f64));
+        Value::Object {
+            type_name: kind.to_string(),
+            fields: Rc::new(RefCell::new(fields)),
+            call: None,
+            value: None,
+        }
+    }
+
     pub fn as_num(&self) -> Option<Num> {
         match self {
             Value::Int(n) => Some(Num::Int(*n)),
@@ -404,6 +416,27 @@ impl<O: PineOutput> Value<O> {
             Value::Bool(b) => Ok(Some(if *b { 1.0 } else { 0.0 })),
             Value::Series(series) => series.current.to_number(),
             Value::Na => Ok(None),
+            // Drawing handles carry their numeric id so `line.set_*(id, ...)`
+            // still receives a number when the script wrote `id.set_*(...)`.
+            Value::Object {
+                type_name, fields, ..
+            } if is_drawing_kind(type_name) => {
+                let id = {
+                    let fields = fields.borrow();
+                    if fields.contains_key("new") {
+                        None
+                    } else {
+                        fields.get("id").cloned()
+                    }
+                };
+                match id {
+                    Some(id) => id.to_number(),
+                    None => Err(RuntimeError::TypeError(format!(
+                        "Expected number, got {:?}",
+                        self
+                    ))),
+                }
+            }
             _ => Err(RuntimeError::TypeError(format!(
                 "Expected number, got {:?}",
                 self
@@ -619,11 +652,40 @@ pub struct Interpreter<O: PineOutput> {
 
 /// The builtin namespace whose functions back a value's method syntax, e.g.
 /// `arr.push(v)` dispatches to `array.push(arr, v)`.
+fn is_drawing_kind(name: &str) -> bool {
+    matches!(
+        name,
+        "line" | "box" | "label" | "table" | "polyline" | "linefill"
+    )
+}
+
 fn builtin_namespace<O: PineOutput>(value: &Value<O>) -> Option<&'static str> {
     match value {
         Value::Array(_) => Some("array"),
         Value::Matrix { .. } => Some("matrix"),
         Value::Map { .. } => Some("map"),
+        // A drawing handle is an object whose type name is its namespace, so
+        // `topLine.set_first_point(point)` is `line.set_first_point(topLine, point)`.
+        // The `line` namespace itself uses that type name too; it has `new` and
+        // no `id`, and must stay a normal callee.
+        Value::Object {
+            type_name, fields, ..
+        } if is_drawing_kind(type_name) => {
+            let fields = fields.borrow();
+            if fields.contains_key("new") || !fields.contains_key("id") {
+                None
+            } else {
+                match type_name.as_str() {
+                    "line" => Some("line"),
+                    "box" => Some("box"),
+                    "label" => Some("label"),
+                    "table" => Some("table"),
+                    "polyline" => Some("polyline"),
+                    "linefill" => Some("linefill"),
+                    _ => None,
+                }
+            }
+        }
         _ => None,
     }
 }

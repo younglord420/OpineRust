@@ -19,9 +19,20 @@ struct ArrayNew<O: PineOutput> {
 impl<O: PineOutput> ArrayNew<O> {
     fn execute(&self, ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
         // A built-in element type, or any declared user-defined type.
+        // Drawing ids are values a script stores in an array (`array.new<box>()`).
         let is_builtin = matches!(
             self.element_type.as_str(),
-            "int" | "float" | "string" | "bool" | "color"
+            "int"
+                | "float"
+                | "string"
+                | "bool"
+                | "color"
+                | "box"
+                | "line"
+                | "label"
+                | "linefill"
+                | "polyline"
+                | "table"
         );
         if !is_builtin && !ctx.is_user_type(&self.element_type) {
             return Err(RuntimeError::TypeError(format!(

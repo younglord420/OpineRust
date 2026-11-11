@@ -55,7 +55,7 @@ impl<O: PineOutput + LabelOutput> LabelNew<O> {
         let id = ctx.output.add_label(label);
 
         // Return the ID as a number
-        Ok(Value::Number(id as f64))
+        Ok(Value::drawing_handle("label", id))
     }
 }
 

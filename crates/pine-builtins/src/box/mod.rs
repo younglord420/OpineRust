@@ -68,7 +68,7 @@ impl<O: PineOutput + BoxOutput> BoxNew<O> {
         let id = ctx.output.add_box(box_obj);
 
         // Return the ID as a number
-        Ok(Value::Number(id as f64))
+        Ok(Value::drawing_handle("box", id))
     }
 }
 

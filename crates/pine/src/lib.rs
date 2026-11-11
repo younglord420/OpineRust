@@ -441,6 +441,48 @@ mod tests {
     use super::inputs_from_json;
     use pine_core::InputValue;
 
+    /// `+1` is a value, and `inline` only groups settings on a chart.
+    #[test]
+    fn a_leading_plus_and_an_inline_input_run() {
+        use pine_core::{Data, Ohlcv};
+
+        let source = r#"//@version=5
+indicator("x")
+bull = +1
+mode = input.string("a", "Mode", inline = "row", options = ["a", "b"])
+plot(bull + (mode == "a" ? 0 : 1))
+"#;
+        let data = Data::from_ohlcv([Ohlcv {
+            time: 1_700_000_000_000,
+            open: 1.0,
+            high: 2.0,
+            low: 0.5,
+            close: 1.5,
+            volume: 10.0,
+        }]);
+        super::execute(source, data).expect("unary plus and inline run");
+    }
+
+    #[test]
+    fn a_line_created_with_bar_time_runs() {
+        use pine_core::{Data, Ohlcv};
+        let source = r#"//@version=5
+indicator("x", overlay = true)
+var l = line.new(na, na, na, na, xloc = xloc.bar_time)
+l.set_first_point(chart.point.new(time, na, high))
+plot(close)
+"#;
+        let data = Data::from_ohlcv([Ohlcv {
+            time: 1_700_000_000_000,
+            open: 1.0,
+            high: 2.0,
+            low: 0.5,
+            close: 1.5,
+            volume: 10.0,
+        }]);
+        super::execute(source, data).expect("bar_time drawings");
+    }
+
     #[test]
     fn decodes_input_overrides_from_json() {
         let map = inputs_from_json(r#"{"Length": 20, "Ratio": 1.5, "On": true, "Mode": "fast"}"#)

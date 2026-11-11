@@ -45,7 +45,7 @@ impl<O: PineOutput + LineOutput> LineNew<O> {
             width: self.width,
         };
         let id = ctx.output.add_line(line);
-        Ok(Value::Number(id as f64))
+        Ok(Value::drawing_handle("line", id))
     }
 }
 
@@ -386,7 +386,7 @@ impl<O: PineOutput + LineOutput> Hline<O> {
             width: self.linewidth,
         };
         let id = ctx.output.add_line(line);
-        Ok(Value::Number(id as f64))
+        Ok(Value::drawing_handle("line", id))
     }
 }
 

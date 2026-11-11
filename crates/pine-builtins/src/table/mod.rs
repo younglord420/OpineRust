@@ -49,7 +49,7 @@ impl TableNew {
             cells: HashMap::new(),
         };
         let id = ctx.output.add_table(table);
-        Ok(Value::Number(id as f64))
+        Ok(Value::drawing_handle("table", id))
     }
 }
 

@@ -1561,6 +1561,13 @@ impl Parser {
             });
         }
 
+        // `+x` is the value itself. Published scripts write `BULLISH = +1`.
+        // Keeping the inner expression means the runtime does not need a new
+        // operator, and `1 + +2` still binds the second plus as unary.
+        if self.match_token(&[TokenType::Plus]) {
+            return self.unary();
+        }
+
         self.postfix()
     }
 
@@ -2080,6 +2087,23 @@ mod tests {
         if let Expr::Unary { op, expr } = expr {
             assert_eq!(op, UnOp::Neg);
             assert_eq!(*expr, Expr::Literal(Literal::Int(5)));
+        }
+
+        // A leading plus is the number itself, including `+ +1`.
+        let expr = parse_expr("+5").unwrap();
+        assert_eq!(expr, Expr::Literal(Literal::Int(5)));
+        let expr = parse_expr("++1").unwrap();
+        assert_eq!(expr, Expr::Literal(Literal::Int(1)));
+
+        // The second plus in `1 + +2` is unary, not a second binary operator.
+        let expr = parse_expr("1 + +2").unwrap();
+        if let Expr::Binary {
+            left, op, right, ..
+        } = expr
+        {
+            assert_eq!(*left, Expr::Literal(Literal::Int(1)));
+            assert_eq!(op, BinOp::Add);
+            assert_eq!(*right, Expr::Literal(Literal::Int(2)));
         }
 
         // Double negation

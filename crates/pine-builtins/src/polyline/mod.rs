@@ -52,7 +52,7 @@ impl<O: PineOutput + DrawingOutput> PolylineNew<O> {
             line_style: self.line_style.clone(),
             line_width: self.line_width,
         });
-        Ok(Value::Number(id as f64))
+        Ok(Value::drawing_handle("polyline", id))
     }
 }
 

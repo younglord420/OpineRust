@@ -27,7 +27,7 @@ impl LinefillNew {
             line2: self.line2.max(0.0) as usize,
             color: Some(self.color.clone()),
         });
-        Ok(Value::Number(id as f64))
+        Ok(Value::drawing_handle("linefill", id))
     }
 }
 

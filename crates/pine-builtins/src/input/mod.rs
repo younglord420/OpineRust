@@ -104,13 +104,17 @@ struct InputInt<O: PineOutput + InputOutput> {
     group: String,
     #[arg(default = "")]
     tooltip: String,
+    /// Chart-only row grouping (`inline = "name"`). The runtime has no settings
+    /// row, so the value is accepted and ignored.
+    #[arg(default = "")]
+    inline: String,
     #[arg(default = Value::Na)]
     options: Value<O>,
 }
 
 impl<O: PineOutput + InputOutput> InputInt<O> {
     fn execute(&self, ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
-        let _ = (&self.tooltip, &self.options);
+        let _ = (&self.tooltip, &self.inline, &self.options);
         let value = num_input(ctx, &self.title, self.defval, self.minval, self.maxval).trunc();
         ctx.output.add_input(Input {
             kind: "int".to_string(),
@@ -143,13 +147,17 @@ struct InputFloat<O: PineOutput + InputOutput> {
     group: String,
     #[arg(default = "")]
     tooltip: String,
+    /// Chart-only row grouping (`inline = "name"`). The runtime has no settings
+    /// row, so the value is accepted and ignored.
+    #[arg(default = "")]
+    inline: String,
     #[arg(default = Value::Na)]
     options: Value<O>,
 }
 
 impl<O: PineOutput + InputOutput> InputFloat<O> {
     fn execute(&self, ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
-        let _ = (&self.tooltip, &self.options);
+        let _ = (&self.tooltip, &self.inline, &self.options);
         let value = num_input(ctx, &self.title, self.defval, self.minval, self.maxval);
         ctx.output.add_input(Input {
             kind: "float".to_string(),
@@ -176,6 +184,10 @@ struct InputBool {
     group: String,
     #[arg(default = "")]
     tooltip: String,
+    /// Chart-only row grouping (`inline = "name"`). The runtime has no settings
+    /// row, so the value is accepted and ignored.
+    #[arg(default = "")]
+    inline: String,
 }
 
 impl InputBool {
@@ -183,7 +195,7 @@ impl InputBool {
         &self,
         ctx: &mut Interpreter<O>,
     ) -> Result<Value<O>, RuntimeError> {
-        let _ = &self.tooltip;
+        let _ = (&self.tooltip, &self.inline);
         let value = bool_input(ctx, &self.title, self.defval);
         ctx.output.add_input(Input {
             kind: "bool".to_string(),
@@ -210,13 +222,17 @@ struct InputString<O: PineOutput + InputOutput> {
     group: String,
     #[arg(default = "")]
     tooltip: String,
+    /// Chart-only row grouping (`inline = "name"`). The runtime has no settings
+    /// row, so the value is accepted and ignored.
+    #[arg(default = "")]
+    inline: String,
     #[arg(default = Value::Na)]
     options: Value<O>,
 }
 
 impl<O: PineOutput + InputOutput> InputString<O> {
     fn execute(&self, ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
-        let _ = &self.tooltip;
+        let _ = (&self.tooltip, &self.inline);
         let value = string_input(ctx, &self.title, &self.defval, &self.options);
         ctx.output.add_input(Input {
             kind: "string".to_string(),
@@ -243,13 +259,17 @@ struct InputSession<O: PineOutput + InputOutput> {
     group: String,
     #[arg(default = "")]
     tooltip: String,
+    /// Chart-only row grouping (`inline = "name"`). The runtime has no settings
+    /// row, so the value is accepted and ignored.
+    #[arg(default = "")]
+    inline: String,
     #[arg(default = Value::Na)]
     options: Value<O>,
 }
 
 impl<O: PineOutput + InputOutput> InputSession<O> {
     fn execute(&self, ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
-        let _ = &self.tooltip;
+        let _ = (&self.tooltip, &self.inline);
         let value = string_input(ctx, &self.title, &self.defval, &self.options);
         ctx.output.add_input(Input {
             kind: "session".to_string(),
@@ -276,6 +296,10 @@ struct InputColor {
     group: String,
     #[arg(default = "")]
     tooltip: String,
+    /// Chart-only row grouping (`inline = "name"`). The runtime has no settings
+    /// row, so the value is accepted and ignored.
+    #[arg(default = "")]
+    inline: String,
 }
 
 impl InputColor {
@@ -283,7 +307,7 @@ impl InputColor {
         &self,
         ctx: &mut Interpreter<O>,
     ) -> Result<Value<O>, RuntimeError> {
-        let _ = &self.tooltip;
+        let _ = (&self.tooltip, &self.inline);
         ctx.output.add_input(Input {
             kind: "color".to_string(),
             title: self.title.clone(),
@@ -309,6 +333,10 @@ struct InputTime {
     group: String,
     #[arg(default = "")]
     tooltip: String,
+    /// Chart-only row grouping (`inline = "name"`). The runtime has no settings
+    /// row, so the value is accepted and ignored.
+    #[arg(default = "")]
+    inline: String,
 }
 
 impl InputTime {
@@ -316,7 +344,7 @@ impl InputTime {
         &self,
         ctx: &mut Interpreter<O>,
     ) -> Result<Value<O>, RuntimeError> {
-        let _ = &self.tooltip;
+        let _ = (&self.tooltip, &self.inline);
         let value = num_input(ctx, &self.title, self.defval, None, None);
         ctx.output.add_input(Input {
             kind: "time".to_string(),
@@ -343,11 +371,15 @@ struct InputSource<O: PineOutput + InputOutput> {
     group: String,
     #[arg(default = "")]
     tooltip: String,
+    /// Chart-only row grouping (`inline = "name"`). The runtime has no settings
+    /// row, so the value is accepted and ignored.
+    #[arg(default = "")]
+    inline: String,
 }
 
 impl<O: PineOutput + InputOutput> InputSource<O> {
     fn execute(&self, ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
-        let _ = &self.tooltip;
+        let _ = (&self.tooltip, &self.inline);
         // The default is a series (e.g. `close`); record its id for reference.
         let series_id = match &self.defval {
             Value::Series(series) => series.id.clone(),
@@ -378,13 +410,17 @@ struct InputPrice<O: PineOutput + InputOutput> {
     group: String,
     #[arg(default = "")]
     tooltip: String,
+    /// Chart-only row grouping (`inline = "name"`). The runtime has no settings
+    /// row, so the value is accepted and ignored.
+    #[arg(default = "")]
+    inline: String,
     #[arg(default = Value::Na)]
     options: Value<O>,
 }
 
 impl<O: PineOutput + InputOutput> InputPrice<O> {
     fn execute(&self, ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
-        let _ = (&self.tooltip, &self.options);
+        let _ = (&self.tooltip, &self.inline, &self.options);
         let value = num_input(ctx, &self.title, self.defval, None, None);
         ctx.output.add_input(Input {
             kind: "price".to_string(),
@@ -414,6 +450,8 @@ macro_rules! input_string_like {
             group: String,
             #[arg(default = "")]
             tooltip: String,
+            #[arg(default = "")]
+            inline: String,
         }
 
         impl $ident {
@@ -421,7 +459,7 @@ macro_rules! input_string_like {
                 &self,
                 ctx: &mut Interpreter<O>,
             ) -> Result<Value<O>, RuntimeError> {
-                let _ = &self.tooltip;
+                let _ = (&self.tooltip, &self.inline);
                 let value = string_input(ctx, &self.title, &self.defval, &Value::Na);
                 ctx.output.add_input(Input {
                     kind: $kind.to_string(),
@@ -454,11 +492,15 @@ struct InputEnum<O: PineOutput + InputOutput> {
     group: String,
     #[arg(default = "")]
     tooltip: String,
+    /// Chart-only row grouping (`inline = "name"`). The runtime has no settings
+    /// row, so the value is accepted and ignored.
+    #[arg(default = "")]
+    inline: String,
 }
 
 impl<O: PineOutput + InputOutput> InputEnum<O> {
     fn execute(&self, ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
-        let _ = &self.tooltip;
+        let _ = (&self.tooltip, &self.inline);
         let member = match &self.defval {
             Value::Enum { field_name, .. } => field_name.clone(),
             _ => String::new(),
@@ -489,11 +531,15 @@ struct InputAuto<O: PineOutput + InputOutput> {
     group: String,
     #[arg(default = "")]
     tooltip: String,
+    /// Chart-only row grouping (`inline = "name"`). The runtime has no settings
+    /// row, so the value is accepted and ignored.
+    #[arg(default = "")]
+    inline: String,
 }
 
 impl<O: PineOutput + InputOutput> InputAuto<O> {
     fn execute(&self, ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
-        let _ = &self.tooltip;
+        let _ = (&self.tooltip, &self.inline);
         // The type is inferred from the default, and the override coerced to it.
         let (kind, default, effective, effective_value) = match &self.defval {
             Value::Bool(b) => {
