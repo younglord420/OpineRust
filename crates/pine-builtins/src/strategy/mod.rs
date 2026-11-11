@@ -18,7 +18,7 @@ use pine_broker::{
     RiskRule, RiskType, Sizing, Trade,
 };
 use pine_builtin_macro::BuiltinFunction;
-use pine_core::{PineOutput, PineVersion, SeriesBuffer, MAX_LOOKBACK};
+use pine_core::{Indicator, MetadataOutput, PineOutput, PineVersion, SeriesBuffer, MAX_LOOKBACK};
 use pine_interpreter::{
     Builtin, BuiltinFn, EvaluatedArg, Interpreter, ObjectFields, PerBarAdvance, RuntimeError,
     Series, Value,
@@ -34,7 +34,7 @@ const DEFAULT_INITIAL_CAPITAL: f64 = 1_000_000.0;
 /// and reporting-only parameters are accepted and ignored. Runs every bar, but
 /// only builds the broker on the first, so state persists across the backtest.
 #[derive(BuiltinFunction)]
-#[builtin(name = "strategy")]
+#[builtin(name = "strategy", output = MetadataOutput)]
 struct StrategyFn {
     #[allow(dead_code)]
     title: String,
@@ -67,15 +67,24 @@ struct StrategyFn {
 }
 
 impl StrategyFn {
-    fn execute<O: PineOutput>(&self, ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
-        let _ = (
-            &self.shorttitle,
-            self.overlay,
-            &self.format,
-            self.precision,
-            &self.scale,
-            &self.currency,
-        );
+    fn execute<O: PineOutput + MetadataOutput>(
+        &self,
+        ctx: &mut Interpreter<O>,
+    ) -> Result<Value<O>, RuntimeError> {
+        // A strategy declares the same identity as an indicator: its title, short
+        // title and pane placement are what a chart names the script by. Recording
+        // only the broker left a strategy showing up as an untitled study.
+        if ctx.output.indicator().is_none() {
+            ctx.output.set_indicator(Indicator {
+                title: self.title.clone(),
+                shorttitle: self.shorttitle.clone(),
+                overlay: self.overlay,
+                format: self.format.clone(),
+                precision: self.precision.map(|value| value as i64),
+                timeframe: String::new(),
+            });
+        }
+        let _ = (&self.scale, &self.currency);
 
         // Runs every bar; build the broker only once so trades accumulate.
         if ctx.broker.is_none() {
@@ -1030,7 +1039,7 @@ fn per_trade<O: PineOutput>(total: f64, count: usize) -> Value<O> {
 /// Build the `strategy` namespace object: the callable declaration, the order
 /// commands, the direction and sizing constants, and the read-only account
 /// values computed from the broker on use.
-pub fn register<O: PineOutput>(
+pub fn register<O: PineOutput + MetadataOutput>(
     _version: PineVersion,
 ) -> (Value<O>, PerBarAdvance<O>, PerBarAdvance<O>) {
     let mut fields: HashMap<String, Value<O>> = HashMap::new();

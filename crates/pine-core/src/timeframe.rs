@@ -102,14 +102,30 @@ impl std::str::FromStr for Timeframe {
     type Err = TimeframeError;
 
     /// Parse a Pine period string (`"5"`, `"60"`, `"1D"`, `"30S"`, `"1W"`).
+    ///
+    /// A bare `"D"`, `"W"` or `"M"` is Pine's shorthand for `"1D"`, `"1W"` and
+    /// `"1M"`, and `request.security(..., "D", ...)` is written that way in most
+    /// published scripts, so the missing multiplier reads as 1 rather than
+    /// failing. An unknown suffix is still an error: guessing there would hand a
+    /// script a period it did not ask for.
     fn from_str(period: &str) -> Result<Self, Self::Err> {
         let bad = || TimeframeError(period.to_string());
         let split = period
             .find(|c: char| !c.is_ascii_digit())
             .unwrap_or(period.len());
         let (count, suffix) = period.split_at(split);
+        let multiplier = if count.is_empty() {
+            // Only a unit suffix alone is that shorthand; a bare `""` stays an
+            // error, since no period was written at all.
+            if suffix.is_empty() {
+                return Err(bad());
+            }
+            1
+        } else {
+            count.parse().ok().filter(|&m| m > 0).ok_or_else(bad)?
+        };
         Ok(Self {
-            multiplier: count.parse().ok().filter(|&m| m > 0).ok_or_else(bad)?,
+            multiplier,
             unit: TimeframeUnit::from_suffix(suffix).ok_or_else(bad)?,
         })
     }
@@ -231,6 +247,27 @@ mod tests {
         }
         // Minutes have no suffix, so a bare number is minutes.
         assert!(Timeframe::from_str("5").unwrap().is_minutes());
+    }
+
+    /// `request.security(sym, "D", …)` is how most published scripts spell a
+    /// daily request; refusing it made every such call read `na`.
+    #[test]
+    fn a_bare_unit_suffix_means_one_of_that_unit() {
+        for (shorthand, explicit) in [("D", "1D"), ("W", "1W"), ("M", "1M")] {
+            assert_eq!(
+                Timeframe::from_str(shorthand).unwrap(),
+                Timeframe::from_str(explicit).unwrap(),
+                "{shorthand}"
+            );
+        }
+        assert!(
+            Timeframe::from_str("").is_err(),
+            "no period is not a period"
+        );
+        assert!(
+            Timeframe::from_str("X").is_err(),
+            "an unknown unit stays bad"
+        );
     }
 
     #[test]
