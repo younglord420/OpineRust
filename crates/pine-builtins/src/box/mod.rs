@@ -11,7 +11,10 @@ use std::rc::Rc;
 struct BoxNew<O: PineOutput + BoxOutput> {
     left: Value<O>,
     top: Value<O>,
+    /// Absent for `box.new(point1, point2, ...)`.
+    #[arg(default = Value::Na)]
     right: Value<O>,
+    #[arg(default = Value::Na)]
     bottom: Value<O>,
     #[arg(default = None)]
     border_color: Option<Color>,
@@ -44,11 +47,23 @@ struct BoxNew<O: PineOutput + BoxOutput> {
 impl<O: PineOutput + BoxOutput> BoxNew<O> {
     fn execute(&self, ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
         // Create a box struct
+        let (left, top, right, bottom) = if crate::chart::is_chart_point(&self.left) {
+            let (left, top) = crate::chart::point_coords(&self.left)?;
+            let (right, bottom) = crate::chart::point_coords(&self.top)?;
+            (left, top, right, bottom)
+        } else {
+            (
+                self.left.as_number()?,
+                self.top.as_number()?,
+                self.right.as_number()?,
+                self.bottom.as_number()?,
+            )
+        };
         let box_obj = PineBox {
-            left: self.left.as_number()?,
-            top: self.top.as_number()?,
-            right: self.right.as_number()?,
-            bottom: self.bottom.as_number()?,
+            left,
+            top,
+            right,
+            bottom,
             border_color: self.border_color.clone(),
             border_width: self.border_width,
             border_style: self.border_style.clone(),

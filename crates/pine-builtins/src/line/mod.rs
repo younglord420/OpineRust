@@ -11,13 +11,28 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-/// line.new(x1, y1, x2, y2, xloc, extend, color, style, width) - Creates a line
+fn xloc_token(token: &str) -> Result<XLoc, RuntimeError> {
+    match token {
+        "bar_index" => Ok(XLoc::BarIndex),
+        "bar_time" => Ok(XLoc::BarTime),
+        other => Err(RuntimeError::TypeError(format!(
+            "`xloc`: unknown variant `{other}`, expected `bar_index` or `bar_time`"
+        ))),
+    }
+}
+
+/// line.new(x1, y1, x2, y2, xloc, extend, color, style, width) - Creates a line.
+/// Also `line.new(point1, point2, xloc, ...)`, where each point is a `chart.point`.
 #[derive(BuiltinFunction)]
 #[builtin(name = "line.new")]
 struct LineNew<O: PineOutput + LineOutput> {
     x1: Value<O>,
     y1: Value<O>,
+    /// Absent when the call is `line.new(point1, point2, ...)`. A following
+    /// positional `xloc.bar_time` lands here because it is the third argument.
+    #[arg(default = Value::Na)]
     x2: Value<O>,
+    #[arg(default = Value::Na)]
     y2: Value<O>,
     #[arg(default = XLoc::BarIndex)]
     xloc: XLoc,
@@ -33,12 +48,30 @@ struct LineNew<O: PineOutput + LineOutput> {
 
 impl<O: PineOutput + LineOutput> LineNew<O> {
     fn execute(&self, ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
+        let (x1, y1, x2, y2, xloc) = if crate::chart::is_chart_point(&self.x1) {
+            let (x1, y1) = crate::chart::point_coords(&self.x1)?;
+            let (x2, y2) = crate::chart::point_coords(&self.y1)?;
+            // `line.new(p1, p2, xloc.bar_time)` puts the xloc token in `x2`.
+            let xloc = match &self.x2 {
+                Value::String(token) => xloc_token(token)?,
+                _ => self.xloc,
+            };
+            (x1, y1, x2, y2, xloc)
+        } else {
+            (
+                self.x1.as_number()?,
+                self.y1.as_number()?,
+                self.x2.as_number()?,
+                self.y2.as_number()?,
+                self.xloc,
+            )
+        };
         let line = LineObject {
-            x1: self.x1.as_number()?,
-            y1: self.y1.as_number()?,
-            x2: self.x2.as_number()?,
-            y2: self.y2.as_number()?,
-            xloc: self.xloc,
+            x1,
+            y1,
+            x2,
+            y2,
+            xloc,
             extend: self.extend,
             color: self.color.clone(),
             style: self.style,

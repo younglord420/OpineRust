@@ -470,6 +470,10 @@ plot(bull + (mode == "a" ? 0 : 1))
 indicator("x", overlay = true)
 var l = line.new(na, na, na, na, xloc = xloc.bar_time)
 l.set_first_point(chart.point.new(time, na, high))
+var p = line.new(chart.point.new(time, na, low), chart.point.new(time, na, high), xloc.bar_time, color = color.red)
+var q = line.new(chart.point.new(time, na, low), chart.point.new(time, na, high), xloc = xloc.bar_time)
+var b = box.new(chart.point.new(time, na, high), chart.point.new(time, na, low), xloc = xloc.bar_time, bgcolor = color.blue)
+var t = label.new(chart.point.new(na, bar_index, high), "T", xloc.bar_index, textcolor = color.white)
 plot(close)
 "#;
         let data = Data::from_ohlcv([Ohlcv {

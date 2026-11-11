@@ -36,11 +36,36 @@ struct LabelNew<O: PineOutput + LabelOutput> {
 impl<O: PineOutput + LabelOutput> LabelNew<O> {
     fn execute(&self, ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
         // Create a label struct
+        let (x, y, text, xloc) = if crate::chart::is_chart_point(&self.x) {
+            let (x, y) = crate::chart::point_coords(&self.x)?;
+            // `label.new(point, text, xloc.bar_index)` stores the text in `y`
+            // and a positional xloc token in `text`.
+            let tag = self.y.as_string().unwrap_or_default();
+            let xloc = match self.text.as_str() {
+                "bar_index" => XLoc::BarIndex,
+                "bar_time" => XLoc::BarTime,
+                _ => self.xloc,
+            };
+            let text =
+                if self.text.is_empty() || self.text == "bar_index" || self.text == "bar_time" {
+                    tag
+                } else {
+                    self.text.clone()
+                };
+            (x, y, text, xloc)
+        } else {
+            (
+                self.x.as_number()?,
+                self.y.as_number()?,
+                self.text.clone(),
+                self.xloc,
+            )
+        };
         let label = Label {
-            x: self.x.as_number()?,
-            y: self.y.as_number()?,
-            text: self.text.clone(),
-            xloc: self.xloc,
+            x,
+            y,
+            text,
+            xloc,
             yloc: self.yloc,
             color: self.color.clone(),
             style: self.style,

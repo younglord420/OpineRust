@@ -125,6 +125,11 @@ impl<O: PineOutput> ChartPointCopy<O> {
     }
 }
 
+/// Whether `value` is a `chart.point` rather than a bare coordinate.
+pub fn is_chart_point<O: PineOutput>(value: &Value<O>) -> bool {
+    matches!(value, Value::Object { type_name, .. } if type_name == "chart.point")
+}
+
 /// The `(x, y)` a `chart.point` denotes for a drawing: `x` is the bar index (or
 /// the time when the index is `na`), `y` is the price. Used by the
 /// `line`/`box`/`label` point setters.
