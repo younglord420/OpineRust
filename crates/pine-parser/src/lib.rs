@@ -1601,9 +1601,16 @@ impl Parser {
                         "float".to_string()
                     }
                     _ => {
-                        // Try to use the lexeme if it's a keyword
-                        let lexeme = self.peek().lexeme.clone();
-                        if !lexeme.is_empty() {
+                        let peek = self.peek();
+                        let is_ident_like = peek
+                            .lexeme
+                            .starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+                            && peek
+                                .lexeme
+                                .chars()
+                                .all(|c| c.is_ascii_alphanumeric() || c == '_');
+                        if is_ident_like && !matches!(peek.typ, TokenType::Newline) {
+                            let lexeme = peek.lexeme.clone();
                             self.advance();
                             lexeme
                         } else {
@@ -2336,5 +2343,19 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    #[test]
+    fn dot_followed_by_newline_fails_cleanly() {
+        let code = "a.\n";
+        let mut lexer = Lexer::new(code);
+        let tokens = lexer.tokenize().expect("tokenizes");
+        let mut parser = Parser::new(tokens);
+        let err = parser.parse().unwrap_err();
+        assert!(
+            matches!(err.kind, ParserErrorKind::ExpectedIdentifierAfterDot),
+            "expected ExpectedIdentifierAfterDot, got {:?}",
+            err.kind
+        );
     }
 }
