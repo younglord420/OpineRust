@@ -136,6 +136,19 @@ impl MathLog {
     }
 }
 
+/// math.ln(number) - Natural logarithm, the same function as `math.log`.
+#[derive(BuiltinFunction)]
+#[builtin(name = "math.ln")]
+struct MathLn {
+    number: f64,
+}
+
+impl MathLn {
+    fn execute<O: PineOutput>(&self, _ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
+        Ok(Value::Number(self.number.ln()))
+    }
+}
+
 /// math.log10(number) - Returns base-10 logarithm
 #[derive(BuiltinFunction)]
 #[builtin(name = "math.log10")]
@@ -450,6 +463,7 @@ pub fn register<O: PineOutput>(version: PineVersion) -> HashMap<String, Value<O>
     math_ns.insert("sqrt".to_string(), MathSqrt::builtin_value::<O>());
     math_ns.insert("exp".to_string(), MathExp::builtin_value::<O>());
     math_ns.insert("log".to_string(), MathLog::builtin_value::<O>());
+    math_ns.insert("ln".to_string(), MathLn::builtin_value::<O>());
     math_ns.insert("log10".to_string(), MathLog10::builtin_value::<O>());
 
     // Trigonometric functions

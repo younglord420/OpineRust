@@ -385,6 +385,24 @@ impl<O: PineOutput> Script<O> {
                 self.interpreter.set_variable(&name, value);
             }
         }
+        // `time` and the calendar names stay callable. Their lookback is the
+        // number they resolved to on earlier bars, recorded every bar.
+        for name in [
+            "time",
+            "time_close",
+            "time_tradingday",
+            "bar_index",
+            "year",
+            "month",
+            "dayofmonth",
+            "dayofweek",
+            "hour",
+            "minute",
+            "second",
+            "weekofyear",
+        ] {
+            self.interpreter.record_value_lookback(name);
+        }
 
         self.interpreter.execute(&self.program).map_err(Error::from)
     }
@@ -485,6 +503,365 @@ plot(close)
             volume: 10.0,
         }]);
         super::execute(source, data).expect("bar_time drawings");
+    }
+
+    /// A drawing's `xloc` picks the point field. `bar_time` keeps the time when
+    /// `chart.point.now()` also stored an index. `bar_index` keeps `na` when the
+    /// point has no index, instead of substituting the time or bar 0. A box
+    /// born `na` and later filled through `array.get` is the same object.
+    #[test]
+    fn a_drawing_point_follows_its_xloc() {
+        use pine_core::{BoxOutput, Data, LabelOutput, LabelStyle, LineOutput, Ohlcv};
+
+        let source = r#"//@version=5
+indicator("points", overlay = true)
+var held = box.new(na, na, na, na, xloc = xloc.bar_time, extend = extend.right)
+var by_index = box.new(na, na, na, na, xloc = xloc.bar_index)
+var boxes = array.new<box>()
+var ln = line.new(na, na, na, na, xloc = xloc.bar_time)
+var lb = label.new(na, na, "CHoCH", xloc = xloc.bar_time, style = label.style_label_down)
+if barstate.isfirst
+    array.push(boxes, held)
+if barstate.islast
+    box got = array.get(boxes, 0)
+    got.set_top_left_point(chart.point.new(1000, na, high))
+    got.set_bottom_right_point(chart.point.now(low))
+    by_index.set_top_left_point(chart.point.new(1000, na, high))
+    by_index.set_bottom_right_point(chart.point.new(na, bar_index, low))
+    ln.set_first_point(chart.point.now(high))
+    ln.set_second_point(chart.point.new(1000, bar_index, low))
+    lb.set_point(chart.point.now(close))
+"#;
+        let data = Data::from_ohlcv([
+            Ohlcv {
+                time: 1000,
+                open: 1.0,
+                high: 2.0,
+                low: 1.0,
+                close: 2.0,
+                volume: 1.0,
+            },
+            Ohlcv {
+                time: 2000,
+                open: 2.0,
+                high: 4.0,
+                low: 2.0,
+                close: 3.0,
+                volume: 1.0,
+            },
+            Ohlcv {
+                time: 3000,
+                open: 3.0,
+                high: 9.0,
+                low: 3.0,
+                close: 8.0,
+                volume: 1.0,
+            },
+        ]);
+        let run = super::ScriptBuilder::<pine_builtins::DefaultPineOutput>::with_code(source)
+            .with_data(data)
+            .compile()
+            .expect("compiles")
+            .run()
+            .expect("runs");
+        let out = run.outputs.last().expect("a bar");
+        let held = out.get_box(0).expect("the bar_time box");
+        assert_eq!(held.left, 1000.0, "bar_time reads the point time, not an index");
+        assert_eq!(held.top, 9.0);
+        assert_eq!(
+            held.right, 3000.0,
+            "chart.point.now() on a bar_time box uses the bar time, not bar_index"
+        );
+        assert_eq!(held.bottom, 3.0);
+        assert_eq!(held.extend, "right");
+        assert!(held.xloc.contains("time"));
+
+        let by_index = out.get_box(1).expect("the bar_index box");
+        assert!(
+            by_index.left.is_nan(),
+            "a missing index stays na, not 0 and not the time: {}",
+            by_index.left
+        );
+        assert_eq!(by_index.top, 9.0);
+        assert_eq!(by_index.right, 2.0, "bar_index reads the index");
+        assert_eq!(by_index.bottom, 3.0);
+
+        let line = out.get_line(0).expect("the line");
+        assert_eq!(line.x1, 3000.0);
+        assert_eq!(line.y1, 9.0);
+        assert_eq!(
+            line.x2, 1000.0,
+            "bar_time ignores the index that chart.point.new stored beside the time"
+        );
+        assert_eq!(line.y2, 3.0);
+
+        let label = out.get_label(0).expect("the label");
+        assert_eq!(label.x, 3000.0);
+        assert_eq!(label.y, 8.0);
+        assert_eq!(label.text, "CHoCH");
+        assert_eq!(label.style, LabelStyle::StyleLabelDown);
+    }
+
+    /// `time[n]` keeps every bar, including a subscript that runs only once.
+    /// A user type stores that number and still has it on the last bar.
+    #[test]
+    fn a_conditional_time_lookback_stays_in_a_user_type() {
+        use pine_core::{Data, Ohlcv};
+
+        let source = r#"//@version=5
+indicator("udt")
+type T
+    float t
+    float prev
+var T obj = T.new(na, na)
+var float late = na
+if bar_index == 2
+    obj.t := time
+    obj.prev := time[1]
+if barstate.islast
+    late := time[3]
+plot(obj.t, "stored")
+plot(obj.prev, "previous")
+plot(late, "late")
+"#;
+        let data = Data::from_ohlcv([
+            Ohlcv {
+                time: 1000,
+                open: 1.0,
+                high: 1.0,
+                low: 1.0,
+                close: 1.0,
+                volume: 1.0,
+            },
+            Ohlcv {
+                time: 2000,
+                open: 1.0,
+                high: 1.0,
+                low: 1.0,
+                close: 1.0,
+                volume: 1.0,
+            },
+            Ohlcv {
+                time: 3000,
+                open: 1.0,
+                high: 1.0,
+                low: 1.0,
+                close: 1.0,
+                volume: 1.0,
+            },
+            Ohlcv {
+                time: 4000,
+                open: 1.0,
+                high: 1.0,
+                low: 1.0,
+                close: 1.0,
+                volume: 1.0,
+            },
+        ]);
+        let run = super::ScriptBuilder::<pine_builtins::DefaultPineOutput>::with_code(source)
+            .with_data(data)
+            .compile()
+            .expect("compiles")
+            .run()
+            .expect("runs");
+        let collected = super::RunResult::collect(&run.outputs);
+        let stored = collected.plots.get("stored").expect("stored plot");
+        let previous = collected.plots.get("previous").expect("previous plot");
+        let late = collected.plots.get("late").expect("late plot");
+        assert_eq!(stored.last().copied().flatten(), Some(3000.0));
+        assert_eq!(previous.last().copied().flatten(), Some(2000.0));
+        assert_eq!(
+            late.last().copied().flatten(),
+            Some(1000.0),
+            "time[3] on the only bar that reads it is the first bar"
+        );
+    }
+
+    /// The LuxAlgo structure script on this machine. It is not part of the
+    /// crate: a checkout without the file skips the test. The script itself
+    /// stays untracked.
+    #[test]
+    fn the_structure_script_runs_when_present() {
+        use pine_core::{BoxOutput, Data, Ohlcv};
+        let path = "/root/egui-charts/smc.txt";
+        let Ok(source) = std::fs::read_to_string(path) else {
+            return;
+        };
+        let bars: Vec<Ohlcv> = (0..240)
+            .map(|i| {
+                let wave = ((i as f64) / 12.0).sin();
+                let close = 100.0 + 8.0 * wave + (i as f64) * 0.05;
+                Ohlcv {
+                    time: 1_700_000_000_000 + i * 86_400_000,
+                    open: close - 1.0,
+                    high: close + 2.0,
+                    low: close - 2.0,
+                    close,
+                    volume: 1.0,
+                }
+            })
+            .collect();
+        let run = super::ScriptBuilder::<pine_builtins::DefaultPineOutput>::with_code(&source)
+            .with_data(Data::from_ohlcv(bars))
+            .compile()
+            .expect("structure script compiles")
+            .run()
+            .expect("structure script runs");
+        let out = run.outputs.last().expect("a bar");
+        let placed = (0..500).any(|id| {
+            out.get_box(id).is_some_and(|boxed| {
+                boxed.left.is_finite()
+                    && boxed.right.is_finite()
+                    && boxed.top.is_finite()
+                    && boxed.bottom.is_finite()
+                    && boxed.left > 1_000_000.0
+                    && boxed.top != boxed.bottom
+            })
+        });
+        assert!(
+            placed,
+            "no order-block box carried a bar time and a price range"
+        );
+    }
+
+    #[test]
+    fn intraday_intensity_matches_the_bar_formula() {
+        use pine_core::{Data, Ohlcv};
+        let source = r#"//@version=5
+indicator("iii")
+plot(ta.iii, "iii")
+"#;
+        let data = Data::from_ohlcv([Ohlcv {
+            time: 1000,
+            open: 1.0,
+            high: 10.0,
+            low: 0.0,
+            close: 10.0,
+            volume: 5.0,
+        }]);
+        let run = super::ScriptBuilder::<pine_builtins::DefaultPineOutput>::with_code(source)
+            .with_data(data)
+            .compile()
+            .expect("compiles")
+            .run()
+            .expect("runs");
+        let iii = super::RunResult::collect(&run.outputs)
+            .plots
+            .get("iii")
+            .and_then(|v| v.last().copied())
+            .flatten()
+            .expect("iii");
+        assert!((iii - 5.0).abs() < 1e-9, "ta.iii = {iii}");
+    }
+
+    #[test]
+    fn a_source_override_selects_another_series() {
+        use pine_core::{Data, InputValue, Ohlcv};
+        let source = r#"//@version=5
+indicator("src")
+src = input.source(close, "Src")
+plot(src, "src")
+"#;
+        let data = Data::from_ohlcv([Ohlcv {
+            time: 1000,
+            open: 4.0,
+            high: 9.0,
+            low: 1.0,
+            close: 7.0,
+            volume: 1.0,
+        }]);
+        let mut inputs = std::collections::HashMap::new();
+        inputs.insert("Src".to_string(), InputValue::Str("open".to_string()));
+        let run = super::ScriptBuilder::<pine_builtins::DefaultPineOutput>::with_code(source)
+            .with_inputs(inputs)
+            .with_data(data)
+            .compile()
+            .expect("compiles")
+            .run()
+            .expect("runs");
+        let value = super::RunResult::collect(&run.outputs)
+            .plots
+            .get("src")
+            .and_then(|v| v.last().copied())
+            .flatten();
+        assert_eq!(value, Some(4.0));
+    }
+
+    #[test]
+    fn a_table_keeps_its_frame_border_and_merge() {
+        use pine_core::{Data, Ohlcv, TableOutput};
+        let source = r#"//@version=5
+indicator("table")
+var t = table.new(position.top_left, 2, 2, frame_color = color.red, frame_width = 2, border_color = color.blue, border_width = 1)
+if barstate.islast
+    table.merge_cells(t, 0, 0, 1, 0)
+    table.cell_set_tooltip(t, 0, 1, "tip")
+"#;
+        let data = Data::from_ohlcv([Ohlcv {
+            time: 1000,
+            open: 1.0,
+            high: 1.0,
+            low: 1.0,
+            close: 1.0,
+            volume: 1.0,
+        }]);
+        let run = super::ScriptBuilder::<pine_builtins::DefaultPineOutput>::with_code(source)
+            .with_data(data)
+            .compile()
+            .expect("compiles")
+            .run()
+            .expect("runs");
+        let table = run
+            .outputs
+            .last()
+            .and_then(|out| out.get_table(0))
+            .expect("table");
+        assert_eq!(table.frame_width, 2.0);
+        assert_eq!(table.border_width, 1.0);
+        assert!(table.frame_color.is_some());
+        assert!(table.border_color.is_some());
+        assert_eq!(table.merges, vec![(0, 0, 1, 0)]);
+        assert_eq!(
+            table.cells.get(&(0, 1)).map(|cell| cell.tooltip.as_str()),
+            Some("tip")
+        );
+    }
+
+    #[test]
+    fn a_typed_array_constructor_and_natural_log_run() {
+        use pine_core::{Data, Ohlcv};
+        let source = r#"//@version=5
+indicator("more")
+boxes = array.new_box(0)
+plot(array.size(boxes), "n")
+plot(math.ln(math.e), "ln")
+"#;
+        let data = Data::from_ohlcv([Ohlcv {
+            time: 1000,
+            open: 1.0,
+            high: 1.0,
+            low: 1.0,
+            close: 1.0,
+            volume: 1.0,
+        }]);
+        let run = super::ScriptBuilder::<pine_builtins::DefaultPineOutput>::with_code(source)
+            .with_data(data)
+            .compile()
+            .expect("compiles")
+            .run()
+            .expect("runs");
+        let collected = super::RunResult::collect(&run.outputs);
+        assert_eq!(
+            collected.plots.get("n").and_then(|v| v.last().copied()).flatten(),
+            Some(0.0)
+        );
+        let ln = collected
+            .plots
+            .get("ln")
+            .and_then(|v| v.last().copied())
+            .flatten()
+            .expect("ln");
+        assert!((ln - 1.0).abs() < 1e-9, "math.ln(math.e) = {ln}");
     }
 
     #[test]

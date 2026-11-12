@@ -48,8 +48,8 @@ impl<O: PineOutput + BoxOutput> BoxNew<O> {
     fn execute(&self, ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
         // Create a box struct
         let (left, top, right, bottom) = if crate::chart::is_chart_point(&self.left) {
-            let (left, top) = crate::chart::point_coords(&self.left)?;
-            let (right, bottom) = crate::chart::point_coords(&self.top)?;
+            let (left, top) = crate::chart::point_coords(&self.left, &self.xloc)?;
+            let (right, bottom) = crate::chart::point_coords(&self.top, &self.xloc)?;
             (left, top, right, bottom)
         } else {
             (
@@ -646,8 +646,14 @@ struct BoxSetTopLeftPoint<O: PineOutput + BoxOutput> {
 
 impl<O: PineOutput + BoxOutput> BoxSetTopLeftPoint<O> {
     fn execute(&self, ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
-        let (left, top) = crate::chart::point_coords(&self.point)?;
         let id = self.id as usize;
+        let xloc = ctx
+            .output
+            .get_box(id)
+            .ok_or_else(|| RuntimeError::TypeError(format!("Box with id {} not found", id)))?
+            .xloc
+            .clone();
+        let (left, top) = crate::chart::point_coords(&self.point, &xloc)?;
         let box_obj = ctx
             .output
             .get_box_mut(id)
@@ -669,8 +675,14 @@ struct BoxSetBottomRightPoint<O: PineOutput + BoxOutput> {
 
 impl<O: PineOutput + BoxOutput> BoxSetBottomRightPoint<O> {
     fn execute(&self, ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
-        let (right, bottom) = crate::chart::point_coords(&self.point)?;
         let id = self.id as usize;
+        let xloc = ctx
+            .output
+            .get_box(id)
+            .ok_or_else(|| RuntimeError::TypeError(format!("Box with id {} not found", id)))?
+            .xloc
+            .clone();
+        let (right, bottom) = crate::chart::point_coords(&self.point, &xloc)?;
         let box_obj = ctx
             .output
             .get_box_mut(id)

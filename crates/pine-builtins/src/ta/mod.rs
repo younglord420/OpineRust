@@ -276,11 +276,13 @@ fn wvad_next(_prev: f64, b: &Bars) -> f64 {
 }
 
 fn iii_next(_prev: f64, b: &Bars) -> f64 {
-    let denom = (b.high - b.low) * b.volume;
-    if denom == 0.0 {
+    // ((2 * close - high - low) / (high - low)) * volume. A zero range cannot
+    // be divided, so the bar contributes nothing.
+    let range = b.high - b.low;
+    if range == 0.0 {
         0.0
     } else {
-        (2.0 * b.close - b.high - b.low) / denom
+        ((2.0 * b.close - b.high - b.low) / range) * b.volume
     }
 }
 

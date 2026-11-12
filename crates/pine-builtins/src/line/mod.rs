@@ -49,13 +49,16 @@ struct LineNew<O: PineOutput + LineOutput> {
 impl<O: PineOutput + LineOutput> LineNew<O> {
     fn execute(&self, ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
         let (x1, y1, x2, y2, xloc) = if crate::chart::is_chart_point(&self.x1) {
-            let (x1, y1) = crate::chart::point_coords(&self.x1)?;
-            let (x2, y2) = crate::chart::point_coords(&self.y1)?;
             // `line.new(p1, p2, xloc.bar_time)` puts the xloc token in `x2`.
+            // The mode is known before the points are read: `bar_time` takes
+            // each point's time even when `chart.point.now()` also set an index.
             let xloc = match &self.x2 {
                 Value::String(token) => xloc_token(token)?,
                 _ => self.xloc,
             };
+            let mode = crate::chart::xloc_name(xloc);
+            let (x1, y1) = crate::chart::point_coords(&self.x1, mode)?;
+            let (x2, y2) = crate::chart::point_coords(&self.y1, mode)?;
             (x1, y1, x2, y2, xloc)
         } else {
             (
@@ -462,7 +465,8 @@ struct LineSetFirstPoint<O: PineOutput + LineOutput> {
 
 impl<O: PineOutput + LineOutput> LineSetFirstPoint<O> {
     fn execute(&self, ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
-        let (x, y) = crate::chart::point_coords(&self.point)?;
+        let mode = crate::chart::xloc_name(get_line_mut(ctx, self.id)?.xloc);
+        let (x, y) = crate::chart::point_coords(&self.point, mode)?;
         let line = get_line_mut(ctx, self.id)?;
         line.x1 = x;
         line.y1 = y;
@@ -480,7 +484,8 @@ struct LineSetSecondPoint<O: PineOutput + LineOutput> {
 
 impl<O: PineOutput + LineOutput> LineSetSecondPoint<O> {
     fn execute(&self, ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
-        let (x, y) = crate::chart::point_coords(&self.point)?;
+        let mode = crate::chart::xloc_name(get_line_mut(ctx, self.id)?.xloc);
+        let (x, y) = crate::chart::point_coords(&self.point, mode)?;
         let line = get_line_mut(ctx, self.id)?;
         line.x2 = x;
         line.y2 = y;

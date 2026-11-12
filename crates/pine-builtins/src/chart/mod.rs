@@ -68,12 +68,25 @@ struct ChartPointNow {
 
 impl ChartPointNow {
     fn execute<O: PineOutput>(&self, ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
-        let index = ctx.get_variable("bar_index").cloned().unwrap_or(Value::Na);
+        // Snapshot the numbers. `bar_index` is a series that keeps moving; a
+        // point has to remember the bar it was taken on.
+        let index = ctx
+            .get_variable("bar_index")
+            .map(snapshot_number)
+            .unwrap_or(Value::Na);
         let time = ctx
             .current_time
             .map(|ms| Value::Number(ms as f64))
             .unwrap_or(Value::Na);
         Ok(point(time, index, coord(self.price)))
+    }
+}
+
+/// A finite number copied out of a series or a scalar. `na` stays `na`.
+fn snapshot_number<O: PineOutput>(value: &Value<O>) -> Value<O> {
+    match value.as_number() {
+        Ok(number) if number.is_finite() => Value::Number(number),
+        _ => Value::Na,
     }
 }
 
@@ -130,10 +143,24 @@ pub fn is_chart_point<O: PineOutput>(value: &Value<O>) -> bool {
     matches!(value, Value::Object { type_name, .. } if type_name == "chart.point")
 }
 
-/// The `(x, y)` a `chart.point` denotes for a drawing: `x` is the bar index (or
-/// the time when the index is `na`), `y` is the price. Used by the
-/// `line`/`box`/`label` point setters.
-pub fn point_coords<O: PineOutput>(point: &Value<O>) -> Result<(f64, f64), RuntimeError> {
+/// Name of an [`XLoc`](pine_core::XLoc) as the string a drawing stores.
+pub fn xloc_name(xloc: pine_core::XLoc) -> &'static str {
+    match xloc {
+        pine_core::XLoc::BarTime => "bar_time",
+        pine_core::XLoc::BarIndex => "bar_index",
+    }
+}
+
+/// The `(x, y)` a `chart.point` denotes for a drawing whose `xloc` is `xloc`.
+///
+/// `bar_time` reads the point's time even when the index is also set, which is
+/// what `chart.point.now()` produces. `bar_index` reads the index and stays
+/// `na` when the point has none: the time is not a substitute, and `na` is not
+/// turned into bar 0. With an empty mode the index wins, then the time.
+pub fn point_coords<O: PineOutput>(
+    point: &Value<O>,
+    xloc: &str,
+) -> Result<(f64, f64), RuntimeError> {
     let Value::Object { fields, .. } = point else {
         return Err(RuntimeError::TypeError("expected a chart.point".into()));
     };
@@ -145,7 +172,16 @@ pub fn point_coords<O: PineOutput>(point: &Value<O>) -> Result<(f64, f64), Runti
             .unwrap_or(f64::NAN)
     };
     let index = read("index");
-    let x = if index.is_nan() { read("time") } else { index };
+    let time = read("time");
+    let x = if xloc.contains("time") {
+        time
+    } else if xloc.contains("index") {
+        index
+    } else if index.is_nan() {
+        time
+    } else {
+        index
+    };
     Ok((x, read("price")))
 }
 

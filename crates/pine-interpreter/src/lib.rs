@@ -600,6 +600,10 @@ pub struct Interpreter<O: PineOutput> {
     /// get(0) = previous bar, get(1) = two bars ago, etc.
     /// Populated on each `Stmt::Assignment`; supports Pine's `name[n]` lookback.
     pub user_series_history: FastMap<String, SeriesBuffer<Value<O>>>,
+    /// Last bar's resolved value of a builtin that is also a function (`time`,
+    /// `year`, …) or a number replaced every bar (`bar_index`). The variable
+    /// itself stays callable; this is what `[n]` reads.
+    lookback_current: FastMap<String, Value<O>>,
     /// History for subscripted non-variable series expressions (`ta.sma(..)[1]`,
     /// `(high+low)[1]`), keyed by the `Expr::Index` node's id — the same
     /// site-keyed pattern as `function_local_state`.
@@ -709,6 +713,7 @@ impl<O: PineOutput> Interpreter<O> {
             imported: HashMap::new(),
             output: O::default(),
             user_series_history: FastMap::default(),
+            lookback_current: FastMap::default(),
             expr_history: FastMap::default(),
             function_local_state: FastMap::default(),
             var_decls_initialized: FastMap::default(),
@@ -834,6 +839,45 @@ impl<O: PineOutput> Interpreter<O> {
                 is_var_persistent: false,
             },
         );
+    }
+
+    /// Remember `name`'s value for this bar so `name[n]` works on a later bar.
+    ///
+    /// Used for builtins that stay callable objects (`time`, `time_close`,
+    /// `year`, …) and for `bar_index`, which is replaced with a fresh number
+    /// every bar. History is recorded whether or not the script subscripts the
+    /// name on this bar, so `time[n]` inside an `if` that runs only sometimes
+    /// still sees the bars in between.
+    pub fn record_value_lookback(&mut self, name: &str) {
+        enum Snap<O: PineOutput> {
+            Compute(ObjectValueFn<O>),
+            Ready(Value<O>),
+        }
+        let snap = {
+            let Some(var) = self.var(name) else {
+                return;
+            };
+            match &var.value {
+                Value::Object {
+                    value: Some(compute),
+                    ..
+                } => Snap::Compute(compute.clone()),
+                Value::Number(number) => Snap::Ready(Value::Number(*number)),
+                Value::Int(number) => Snap::Ready(Value::Int(*number)),
+                Value::Na => Snap::Ready(Value::Na),
+                _ => return,
+            }
+        };
+        let current = match snap {
+            Snap::Ready(value) => value,
+            Snap::Compute(compute) => match compute(self) {
+                Ok(value) => value,
+                Err(_) => return,
+            },
+        };
+        if let Some(previous) = self.lookback_current.insert(name.to_string(), current) {
+            push_history(&mut self.user_series_history, name, previous);
+        }
     }
 
     /// Set a built-in series to its value for a new bar, keeping the outgoing

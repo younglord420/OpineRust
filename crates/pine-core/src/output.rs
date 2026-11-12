@@ -255,6 +255,11 @@ pub struct TableCell {
     pub text_size: String,
     pub text_halign: String,
     pub text_valign: String,
+    pub text_font_family: String,
+    pub text_formatting: String,
+    pub tooltip: String,
+    pub width: f64,
+    pub height: f64,
 }
 
 /// A table overlay: a fixed grid of cells anchored to a chart position.
@@ -264,6 +269,12 @@ pub struct Table {
     pub columns: usize,
     pub rows: usize,
     pub bgcolor: Option<Color>,
+    pub frame_color: Option<Color>,
+    pub frame_width: f64,
+    pub border_color: Option<Color>,
+    pub border_width: f64,
+    /// Merged rectangles as `(start_column, start_row, end_column, end_row)`.
+    pub merges: Vec<(usize, usize, usize, usize)>,
     pub cells: HashMap<(usize, usize), TableCell>,
 }
 

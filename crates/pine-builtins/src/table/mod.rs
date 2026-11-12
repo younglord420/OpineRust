@@ -35,17 +35,16 @@ impl TableNew {
         &self,
         ctx: &mut Interpreter<O>,
     ) -> Result<Value<O>, RuntimeError> {
-        let _ = (
-            &self.frame_color,
-            self.frame_width,
-            &self.border_color,
-            self.border_width,
-        );
         let table = Table {
             position: self.position.clone(),
             columns: self.columns.max(0.0) as usize,
             rows: self.rows.max(0.0) as usize,
             bgcolor: self.bgcolor.clone(),
+            frame_color: self.frame_color.clone(),
+            frame_width: self.frame_width,
+            border_color: self.border_color.clone(),
+            border_width: self.border_width,
+            merges: Vec::new(),
             cells: HashMap::new(),
         };
         let id = ctx.output.add_table(table);
@@ -86,6 +85,7 @@ impl TableCellFn {
             text_size: self.text_size.clone(),
             text_halign: self.text_halign.clone(),
             text_valign: self.text_valign.clone(),
+            ..TableCell::default()
         };
         set_cell(ctx, self.table_id, self.column, self.row, cell)?;
         Ok(Value::Na)
@@ -325,10 +325,6 @@ impl TableSetPosition {
     }
 }
 
-// The setters below adjust rendering hints the output model does not store
-// (cell size, fonts, frame/border, merges). They validate the target exists and
-// are otherwise no-ops, matching `table.new`, which likewise ignores those hints.
-
 /// table.cell_set_width(table_id, column, row, width)
 #[derive(BuiltinFunction)]
 #[builtin(name = "table.cell_set_width", output = TableOutput)]
@@ -344,8 +340,7 @@ impl TableCellSetWidth {
         &self,
         ctx: &mut Interpreter<O>,
     ) -> Result<Value<O>, RuntimeError> {
-        let _ = self.width;
-        cell_mut(ctx, self.table_id, self.column, self.row)?;
+        cell_mut(ctx, self.table_id, self.column, self.row)?.width = self.width;
         Ok(Value::Na)
     }
 }
@@ -365,8 +360,7 @@ impl TableCellSetHeight {
         &self,
         ctx: &mut Interpreter<O>,
     ) -> Result<Value<O>, RuntimeError> {
-        let _ = self.height;
-        cell_mut(ctx, self.table_id, self.column, self.row)?;
+        cell_mut(ctx, self.table_id, self.column, self.row)?.height = self.height;
         Ok(Value::Na)
     }
 }
@@ -386,8 +380,8 @@ impl TableCellSetTextFontFamily {
         &self,
         ctx: &mut Interpreter<O>,
     ) -> Result<Value<O>, RuntimeError> {
-        let _ = &self.text_font_family;
-        cell_mut(ctx, self.table_id, self.column, self.row)?;
+        cell_mut(ctx, self.table_id, self.column, self.row)?.text_font_family =
+            self.text_font_family.clone();
         Ok(Value::Na)
     }
 }
@@ -407,8 +401,8 @@ impl TableCellSetTextFormatting {
         &self,
         ctx: &mut Interpreter<O>,
     ) -> Result<Value<O>, RuntimeError> {
-        let _ = &self.text_formatting;
-        cell_mut(ctx, self.table_id, self.column, self.row)?;
+        cell_mut(ctx, self.table_id, self.column, self.row)?.text_formatting =
+            self.text_formatting.clone();
         Ok(Value::Na)
     }
 }
@@ -428,8 +422,7 @@ impl TableCellSetTooltip {
         &self,
         ctx: &mut Interpreter<O>,
     ) -> Result<Value<O>, RuntimeError> {
-        let _ = &self.tooltip;
-        cell_mut(ctx, self.table_id, self.column, self.row)?;
+        cell_mut(ctx, self.table_id, self.column, self.row)?.tooltip = self.tooltip.clone();
         Ok(Value::Na)
     }
 }
@@ -450,13 +443,12 @@ impl TableMergeCells {
         &self,
         ctx: &mut Interpreter<O>,
     ) -> Result<Value<O>, RuntimeError> {
-        let _ = (
-            self.start_column,
-            self.start_row,
-            self.end_column,
-            self.end_row,
-        );
-        table_mut(ctx, self.table_id)?;
+        table_mut(ctx, self.table_id)?.merges.push((
+            self.start_column.max(0.0) as usize,
+            self.start_row.max(0.0) as usize,
+            self.end_column.max(0.0) as usize,
+            self.end_row.max(0.0) as usize,
+        ));
         Ok(Value::Na)
     }
 }
@@ -474,8 +466,7 @@ impl TableSetBorderColor {
         &self,
         ctx: &mut Interpreter<O>,
     ) -> Result<Value<O>, RuntimeError> {
-        let _ = &self.border_color;
-        table_mut(ctx, self.table_id)?;
+        table_mut(ctx, self.table_id)?.border_color = Some(self.border_color.clone());
         Ok(Value::Na)
     }
 }
@@ -493,8 +484,7 @@ impl TableSetBorderWidth {
         &self,
         ctx: &mut Interpreter<O>,
     ) -> Result<Value<O>, RuntimeError> {
-        let _ = self.border_width;
-        table_mut(ctx, self.table_id)?;
+        table_mut(ctx, self.table_id)?.border_width = self.border_width;
         Ok(Value::Na)
     }
 }
@@ -512,8 +502,7 @@ impl TableSetFrameColor {
         &self,
         ctx: &mut Interpreter<O>,
     ) -> Result<Value<O>, RuntimeError> {
-        let _ = &self.frame_color;
-        table_mut(ctx, self.table_id)?;
+        table_mut(ctx, self.table_id)?.frame_color = Some(self.frame_color.clone());
         Ok(Value::Na)
     }
 }
@@ -531,8 +520,7 @@ impl TableSetFrameWidth {
         &self,
         ctx: &mut Interpreter<O>,
     ) -> Result<Value<O>, RuntimeError> {
-        let _ = self.frame_width;
-        table_mut(ctx, self.table_id)?;
+        table_mut(ctx, self.table_id)?.frame_width = self.frame_width;
         Ok(Value::Na)
     }
 }

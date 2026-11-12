@@ -380,22 +380,34 @@ struct InputSource<O: PineOutput + InputOutput> {
 impl<O: PineOutput + InputOutput> InputSource<O> {
     fn execute(&self, ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
         let _ = (&self.tooltip, &self.inline);
-        // The default is a series (e.g. `close`); record its id for reference.
         let series_id = match &self.defval {
             Value::Series(series) => series.id.clone(),
             _ => "source".to_string(),
+        };
+        // A host override names another series (`"open"`, `"hl2"`, …). The
+        // default series is used when that name is absent.
+        let chosen = match ctx.input(&self.title) {
+            Some(InputValue::Str(name)) => ctx
+                .get_variable(name)
+                .cloned()
+                .unwrap_or_else(|| self.defval.clone()),
+            _ => self.defval.clone(),
+        };
+        let chosen_id = match &chosen {
+            Value::Series(series) => series.id.clone(),
+            _ => series_id.clone(),
         };
         ctx.output.add_input(Input {
             kind: "source".to_string(),
             title: self.title.clone(),
             group: self.group.clone(),
-            default: InputValue::Str(series_id.clone()),
-            value: InputValue::Str(series_id),
+            default: InputValue::Str(series_id),
+            value: InputValue::Str(chosen_id),
             min_val: None,
             max_val: None,
             step: None,
         });
-        Ok(self.defval.clone())
+        Ok(chosen)
     }
 }
 

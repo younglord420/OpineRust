@@ -40,7 +40,7 @@ impl<O: PineOutput + DrawingOutput> PolylineNew<O> {
         let points: Vec<(f64, f64)> = points
             .borrow()
             .iter()
-            .map(crate::chart::point_coords)
+            .map(|point| crate::chart::point_coords(point, &self.xloc))
             .collect::<Result<_, _>>()?;
         let id = ctx.output.add_polyline(PolylineObject {
             points,
