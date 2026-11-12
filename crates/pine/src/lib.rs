@@ -566,7 +566,10 @@ if barstate.islast
             .expect("runs");
         let out = run.outputs.last().expect("a bar");
         let held = out.get_box(0).expect("the bar_time box");
-        assert_eq!(held.left, 1000.0, "bar_time reads the point time, not an index");
+        assert_eq!(
+            held.left, 1000.0,
+            "bar_time reads the point time, not an index"
+        );
         assert_eq!(held.top, 9.0);
         assert_eq!(
             held.right, 3000.0,
@@ -687,20 +690,45 @@ plot(late, "late")
         let Ok(source) = std::fs::read_to_string(path) else {
             return;
         };
-        let bars: Vec<Ohlcv> = (0..240)
-            .map(|i| {
-                let wave = ((i as f64) / 12.0).sin();
-                let close = 100.0 + 8.0 * wave + (i as f64) * 0.05;
-                Ohlcv {
-                    time: 1_700_000_000_000 + i * 86_400_000,
-                    open: close - 1.0,
-                    high: close + 2.0,
-                    low: close - 2.0,
-                    close,
-                    volume: 1.0,
-                }
-            })
-            .collect();
+        let bars: Vec<Ohlcv> = if let Ok(csv_text) = std::fs::read_to_string("/tmp/btcusdt_1d.csv")
+        {
+            csv_text
+                .lines()
+                .filter(|line| !line.trim().is_empty())
+                .map(|line| {
+                    let parts: Vec<&str> = line.split(',').collect();
+                    let t: i64 = parts[0].parse().unwrap();
+                    let o: f64 = parts[1].parse().unwrap();
+                    let h: f64 = parts[2].parse().unwrap();
+                    let l: f64 = parts[3].parse().unwrap();
+                    let c: f64 = parts[4].parse().unwrap();
+                    let v: f64 = parts[5].parse().unwrap();
+                    Ohlcv {
+                        time: t,
+                        open: o,
+                        high: h,
+                        low: l,
+                        close: c,
+                        volume: v,
+                    }
+                })
+                .collect()
+        } else {
+            (0..240)
+                .map(|i| {
+                    let wave = ((i as f64) / 12.0).sin();
+                    let close = 100.0 + 8.0 * wave + (i as f64) * 0.05;
+                    Ohlcv {
+                        time: 1_700_000_000_000 + i * 86_400_000,
+                        open: close - 1.0,
+                        high: close + 2.0,
+                        low: close - 2.0,
+                        close,
+                        volume: 1.0,
+                    }
+                })
+                .collect()
+        };
         let run = super::ScriptBuilder::<pine_builtins::DefaultPineOutput>::with_code(&source)
             .with_data(Data::from_ohlcv(bars))
             .compile()
@@ -852,7 +880,11 @@ plot(math.ln(math.e), "ln")
             .expect("runs");
         let collected = super::RunResult::collect(&run.outputs);
         assert_eq!(
-            collected.plots.get("n").and_then(|v| v.last().copied()).flatten(),
+            collected
+                .plots
+                .get("n")
+                .and_then(|v| v.last().copied())
+                .flatten(),
             Some(0.0)
         );
         let ln = collected
@@ -862,6 +894,60 @@ plot(math.ln(math.e), "ln")
             .flatten()
             .expect("ln");
         assert!((ln - 1.0).abs() < 1e-9, "math.ln(math.e) = {ln}");
+    }
+
+    #[test]
+    fn test_smc_pivots_and_order_blocks_debug() {
+        use pine_core::{Data, Ohlcv};
+        let source = r#"//@version=5
+indicator("debug")
+leg(int size) =>
+    var leg = 0
+    newLegHigh = high[size] > ta.highest(size)
+    newLegLow = low[size] < ta.lowest(size)
+    if newLegHigh
+        leg := 0
+    else if newLegLow
+        leg := 1
+    leg
+
+startOfNewLeg(int l) => ta.change(l) != 0
+startOfBullishLeg(int l) => ta.change(l) == +1
+startOfBearishLeg(int l) => ta.change(l) == -1
+
+l5 = leg(5)
+new_p = startOfNewLeg(l5)
+plot(l5, "l5")
+plot(new_p ? 1.0 : 0.0, "new_p")
+"#;
+        let bars: Vec<Ohlcv> = (0..50)
+            .map(|i| {
+                let wave = ((i as f64) / 4.0).sin();
+                let close = 100.0 + 10.0 * wave;
+                Ohlcv {
+                    time: 1000 + i * 1000,
+                    open: close,
+                    high: close + 2.0,
+                    low: close - 2.0,
+                    close,
+                    volume: 1.0,
+                }
+            })
+            .collect();
+        let run = super::ScriptBuilder::<pine_builtins::DefaultPineOutput>::with_code(source)
+            .with_data(Data::from_ohlcv(bars))
+            .compile()
+            .expect("compiles")
+            .run()
+            .expect("runs");
+        let coll = super::RunResult::collect(&run.outputs);
+        let new_p = coll.plots.get("new_p").unwrap();
+        let any_new = new_p.iter().filter_map(|&v| v).any(|v| v > 0.5);
+        println!(
+            "new_p count: {:?}",
+            new_p.iter().filter_map(|&v| v).filter(|&v| v > 0.5).count()
+        );
+        assert!(any_new, "should have new pivots");
     }
 
     #[test]

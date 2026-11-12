@@ -145,7 +145,7 @@ pub fn builtin_function_derive(input: TokenStream) -> TokenStream {
                 /// every call site of this builtin, keyed by call id.
                 pub fn builtin_fn #fn_generics () -> ::pine_interpreter::BuiltinFn<O> {
                     let slots: ::std::rc::Rc<::std::cell::RefCell<
-                        ::std::collections::HashMap<u32, #slot_name<O>>
+                        ::std::collections::HashMap<u64, #slot_name<O>>
                     >> = Default::default();
 
                     ::std::rc::Rc::new(move |

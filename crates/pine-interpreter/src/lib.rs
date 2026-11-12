@@ -309,7 +309,7 @@ pub enum EvaluatedArg<O: PineOutput = DefaultPineOutput> {
 pub struct FunctionCallArgs<O: PineOutput = DefaultPineOutput> {
     pub type_args: Vec<String>,
     pub args: Vec<EvaluatedArg<O>>,
-    pub call_id: u32,
+    pub call_id: u64,
 }
 
 impl<O: PineOutput> FunctionCallArgs<O> {
@@ -329,7 +329,7 @@ impl<O: PineOutput> FunctionCallArgs<O> {
         }
     }
 
-    pub fn with_call_id(mut self, call_id: u32) -> Self {
+    pub fn with_call_id(mut self, call_id: u64) -> Self {
         self.call_id = call_id;
         self
     }
@@ -614,7 +614,7 @@ pub struct Interpreter<O: PineOutput> {
     /// state, mirroring TradingView (e.g. `o[1]` inside a function returns the
     /// previous bar's value of that call site's local `o`). A `call_id` of 0
     /// (a call with no stable identity) is not persisted.
-    function_local_state: FastMap<u32, FastMap<String, Variable<O>>>,
+    function_local_state: FastMap<u64, FastMap<String, Variable<O>>>,
     /// `var`/`varip` declarations whose initializer already ran, keyed by
     /// (call-site id, name). Pine `var` initializes only the FIRST time
     /// execution reaches the declaration (once ever, not per bar/iteration).
@@ -625,10 +625,12 @@ pub struct Interpreter<O: PineOutput> {
     ///
     /// The value is the bar it initialized on, so a reassignment can tell that
     /// there is no previous bar to read back yet.
-    var_decls_initialized: FastMap<(u32, String), u64>,
+    var_decls_initialized: FastMap<(u64, String), u64>,
     /// Lexical id of the call site currently executing (0 at top level). Scopes
     /// `var` init-once tracking to the active call site.
-    current_call_id: u32,
+    current_call_id: u64,
+    /// Stack of active call site IDs to qualify nested calls uniquely.
+    call_stack: Vec<u64>,
     /// Counts bars executed. Stateful builtins compare against it to advance
     /// their state at most once per bar, however often their call site runs.
     bar_seq: u64,
@@ -718,6 +720,7 @@ impl<O: PineOutput> Interpreter<O> {
             function_local_state: FastMap::default(),
             var_decls_initialized: FastMap::default(),
             current_call_id: 0,
+            call_stack: Vec::new(),
             bar_seq: 0,
             broker: None,
             broker_factory: Some(Box::new(pine_broker::DefaultBrokerFactory)),
@@ -746,6 +749,19 @@ impl<O: PineOutput> Interpreter<O> {
     /// when this differs from the value it last saw.
     pub fn bar_seq(&self) -> u64 {
         self.bar_seq
+    }
+
+    /// Compute the unique call ID for an expression, qualified by the active call stack.
+    pub fn effective_call_id(&self, expr_id: u32) -> u64 {
+        if self.call_stack.is_empty() {
+            expr_id as u64
+        } else {
+            let mut h = 0xcbf29ce484222325u64;
+            for &c in &self.call_stack {
+                h = (h ^ c).wrapping_mul(0x100000001b3);
+            }
+            (h ^ (expr_id as u64)).wrapping_mul(0x100000001b3)
+        }
     }
 
     /// Set the library loader
@@ -1870,11 +1886,12 @@ impl<O: PineOutput> Interpreter<O> {
                             // Call the method (treating it like a function),
                             // threading the call site id so method-local state
                             // persists per call site.
+                            let effective_id = self.effective_call_id(*id);
                             return self.call_method(
                                 &method_def.params,
                                 &method_def.body,
                                 evaluated_args,
-                                *id,
+                                effective_id,
                             );
                         }
                     }
@@ -1893,9 +1910,10 @@ impl<O: PineOutput> Interpreter<O> {
                             {
                                 let mut evaluated_args = vec![EvaluatedArg::Positional(receiver)];
                                 evaluated_args.extend(self.evaluate_arguments(args, None)?);
+                                let effective_id = self.effective_call_id(*id);
                                 let call_args =
                                     FunctionCallArgs::new(type_args.clone(), evaluated_args)
-                                        .with_call_id(*id);
+                                        .with_call_id(effective_id);
                                 return (builtin_fn.call)(self, call_args);
                             }
                         }
@@ -1912,18 +1930,20 @@ impl<O: PineOutput> Interpreter<O> {
                 };
                 let evaluated_args = self.evaluate_arguments(args, signature)?;
 
+                let effective_id = self.effective_call_id(*id);
+
                 // Call the function based on its type
                 match callee_value {
                     Value::Function { params, body } => {
                         // Thread the call site's lexical id so function-local
                         // state persists per call site, not per function name.
-                        self.call_user_function(&params, &body, args, evaluated_args, *id)
+                        self.call_user_function(&params, &body, args, evaluated_args, effective_id)
                     }
                     Value::BuiltinFunction(builtin_fn) => {
                         // Pass type_args from the parsed call expression, and the
                         // call node's lexical id for per-call-site builtin state.
                         let call_args = FunctionCallArgs::new(type_args.clone(), evaluated_args)
-                            .with_call_id(*id);
+                            .with_call_id(effective_id);
                         (builtin_fn.call)(self, call_args)
                     }
                     // A callable namespace object, like `input(...)` alongside
@@ -1933,7 +1953,7 @@ impl<O: PineOutput> Interpreter<O> {
                         ..
                     } => {
                         let call_args = FunctionCallArgs::new(type_args.clone(), evaluated_args)
-                            .with_call_id(*id);
+                            .with_call_id(effective_id);
                         (builtin.call)(self, call_args)
                     }
                     // Pine's `na` is a keyword that doubles as a function: na(x) → is x na?
@@ -2206,7 +2226,7 @@ impl<O: PineOutput> Interpreter<O> {
         body: &[Stmt],
         arg_exprs: &[Argument],
         args: Vec<EvaluatedArg<O>>,
-        call_id: u32,
+        call_id: u64,
     ) -> Result<Value<O>, RuntimeError> {
         // Extract positional arguments (user functions don't support named args yet)
         let mut positional_values = Vec::new();
@@ -2292,7 +2312,7 @@ impl<O: PineOutput> Interpreter<O> {
     /// TradingView. A `call_id` of 0 (no stable identity) is not persisted.
     fn run_call_site_body(
         &mut self,
-        call_id: u32,
+        call_id: u64,
         param_bindings: Vec<(String, Variable<O>)>,
         body: &[Stmt],
     ) -> Result<Value<O>, RuntimeError> {
@@ -2312,7 +2332,13 @@ impl<O: PineOutput> Interpreter<O> {
         // does not run on inside a stale scope.
         let prev_call_id = self.current_call_id;
         self.current_call_id = call_id;
+        if call_id != 0 {
+            self.call_stack.push(call_id);
+        }
         let result = self.run_body(body);
+        if call_id != 0 {
+            self.call_stack.pop();
+        }
         self.current_call_id = prev_call_id;
 
         let mut frame = self.frames.pop().expect("call frame pushed above");
@@ -2355,7 +2381,7 @@ impl<O: PineOutput> Interpreter<O> {
         params: &[MethodParam],
         body: &[Stmt],
         args: Vec<EvaluatedArg<O>>,
-        call_id: u32,
+        call_id: u64,
     ) -> Result<Value<O>, RuntimeError> {
         // Resolve parameter bindings (positional, named, and defaults), then run
         // the body as a stateful call site. Defaults are evaluated in the caller
