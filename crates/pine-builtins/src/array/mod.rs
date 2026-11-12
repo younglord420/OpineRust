@@ -4,6 +4,14 @@ use pine_interpreter::{Interpreter, RuntimeError, Value};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+/// Unwraps a time series to its current value so arrays store values, not live series wrappers.
+fn unwrap_series<O: PineOutput>(val: Value<O>) -> Value<O> {
+    match val {
+        Value::Series(s) => *s.current,
+        other => other,
+    }
+}
+
 /// array.new<type>() - Creates a new typed array (generic version)
 #[derive(BuiltinFunction)]
 #[builtin(name = "array.new", type_params = 1)]
@@ -89,7 +97,7 @@ struct ArrayPush<O: PineOutput> {
 impl<O: PineOutput> ArrayPush<O> {
     fn execute(&self, _ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
         let arr = self.array.as_array()?;
-        arr.borrow_mut().push(self.value.clone());
+        arr.borrow_mut().push(unwrap_series(self.value.clone()));
         Ok(Value::Na)
     }
 }
@@ -105,7 +113,8 @@ struct ArrayUnshift<O: PineOutput> {
 impl<O: PineOutput> ArrayUnshift<O> {
     fn execute(&self, _ctx: &mut Interpreter<O>) -> Result<Value<O>, RuntimeError> {
         let arr = self.array.as_array()?;
-        arr.borrow_mut().insert(0, self.value.clone());
+        arr.borrow_mut()
+            .insert(0, unwrap_series(self.value.clone()));
         Ok(Value::Na)
     }
 }
@@ -207,7 +216,7 @@ impl<O: PineOutput> ArraySet<O> {
         if index >= arr.len() {
             return Err(RuntimeError::IndexOutOfBounds(index));
         }
-        arr[index] = self.value.clone();
+        arr[index] = unwrap_series(self.value.clone());
         Ok(Value::Na)
     }
 }
@@ -477,7 +486,7 @@ impl<O: PineOutput> ArrayInsert<O> {
         if index > arr.len() {
             return Err(RuntimeError::IndexOutOfBounds(index));
         }
-        arr.insert(index, self.value.clone());
+        arr.insert(index, unwrap_series(self.value.clone()));
         Ok(Value::Na)
     }
 }
@@ -521,8 +530,9 @@ impl<O: PineOutput> ArrayFill<O> {
             .index_to
             .map_or(arr.len(), |n| n as usize)
             .min(arr.len());
+        let val = unwrap_series(self.value.clone());
         for slot in arr.iter_mut().take(to).skip(from) {
-            *slot = self.value.clone();
+            *slot = val.clone();
         }
         Ok(Value::Na)
     }

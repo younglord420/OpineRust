@@ -253,20 +253,26 @@ impl<O: PineOutput> std::fmt::Debug for Value<O> {
 
 impl<O: PineOutput> PartialEq for Value<O> {
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
+        let left = match self {
+            Value::Series(s) => s.current.as_ref(),
+            other => other,
+        };
+        let right = match other {
+            Value::Series(s) => s.current.as_ref(),
+            other => other,
+        };
+        match (left, right) {
             (Value::Int(a), Value::Int(b)) => a == b,
-            // int and float compare by value, so `1 == 1.0`.
+            // int and float compare by value with 1e-10 tolerance (matching TradingView / PineTS).
             (Value::Int(a), Value::Number(b)) | (Value::Number(b), Value::Int(a)) => {
-                (*a as f64 - b).abs() < f64::EPSILON
+                (*a as f64 - b).abs() < 1e-10
             }
-            (Value::Number(a), Value::Number(b)) => (a - b).abs() < f64::EPSILON,
+            (Value::Number(a), Value::Number(b)) => (a - b).abs() < 1e-10,
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::Na, Value::Na) => true,
             // Arrays compare by reference (Rc pointer equality)
             (Value::Array(a), Value::Array(b)) => Rc::ptr_eq(a, b),
-            // Series compare by ID and current value
-            (Value::Series(a), Value::Series(b)) => a.id == b.id && *a.current == *b.current,
             (Value::Object { fields: a, .. }, Value::Object { fields: b, .. }) => Rc::ptr_eq(a, b),
             // Functions never equal (can't compare closures or function pointers)
             (Value::Function { .. }, Value::Function { .. }) => false,
@@ -1268,13 +1274,21 @@ impl<O: PineOutput> Interpreter<O> {
                 let collection_value = self.eval_expr(collection)?;
                 match collection_value {
                     Value::Array(arr) => {
-                        let arr_borrowed = arr.borrow().clone();
-                        for (index, item) in arr_borrowed.into_iter().enumerate() {
+                        let mut i = 0usize;
+                        loop {
+                            let item = {
+                                let borrowed = arr.borrow();
+                                if i >= borrowed.len() {
+                                    break;
+                                }
+                                borrowed[i].clone()
+                            };
+
                             if let Some(idx_var) = index_var {
                                 self.bind(
                                     idx_var.clone(),
                                     Variable {
-                                        value: Value::Int(index as i64),
+                                        value: Value::Int(i as i64),
                                         is_const: false,
                                         is_var_persistent: false,
                                     },
@@ -1294,6 +1308,7 @@ impl<O: PineOutput> Interpreter<O> {
                             if control == LoopControl::Break {
                                 break;
                             }
+                            i += 1;
                         }
                     }
                     Value::Map { data, .. } => {
