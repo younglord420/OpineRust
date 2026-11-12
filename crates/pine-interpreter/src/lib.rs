@@ -874,6 +874,61 @@ impl<O: PineOutput> Interpreter<O> {
         );
     }
 
+    /// Advance a numeric series without re-allocating `String` keys or `Box` pointers.
+    pub fn advance_series_number(&mut self, name: &str, number: f64) {
+        let existing = match self.frames.last_mut() {
+            Some(frame) => frame.get_mut(name),
+            None => self.variables.get_mut(name),
+        };
+        if let Some(var) = existing {
+            if let Value::Series(series) = &mut var.value {
+                let previous = *series.current.clone();
+                *series.current = Value::Number(number);
+                push_history(&mut self.user_series_history, name, previous);
+                return;
+            }
+        }
+        self.advance_series(
+            name,
+            Value::Series(Series {
+                id: name.to_string(),
+                current: Box::new(Value::Number(number)),
+                history: None,
+            }),
+        );
+    }
+
+    /// Updates the boolean flags of the `barstate` object in place without reallocating map entries.
+    pub fn update_barstate_fields(
+        &mut self,
+        is_first: bool,
+        is_last: bool,
+        is_new: bool,
+        is_confirmed: bool,
+        is_history: bool,
+        is_realtime: bool,
+        is_last_confirmed_history: bool,
+    ) {
+        let existing = match self.frames.last_mut() {
+            Some(frame) => frame.get_mut("barstate"),
+            None => self.variables.get_mut("barstate"),
+        };
+        if let Some(Variable {
+            value: Value::Object { fields, .. },
+            ..
+        }) = existing
+        {
+            let mut map = fields.borrow_mut();
+            if let Some(v) = map.get_mut("isfirst") { *v = Value::Bool(is_first); }
+            if let Some(v) = map.get_mut("islast") { *v = Value::Bool(is_last); }
+            if let Some(v) = map.get_mut("isnew") { *v = Value::Bool(is_new); }
+            if let Some(v) = map.get_mut("isconfirmed") { *v = Value::Bool(is_confirmed); }
+            if let Some(v) = map.get_mut("ishistory") { *v = Value::Bool(is_history); }
+            if let Some(v) = map.get_mut("isrealtime") { *v = Value::Bool(is_realtime); }
+            if let Some(v) = map.get_mut("islastconfirmedhistory") { *v = Value::Bool(is_last_confirmed_history); }
+        }
+    }
+
     /// Remember `name`'s value for this bar so `name[n]` works on a later bar.
     ///
     /// Used for builtins that stay callable objects (`time`, `time_close`,
