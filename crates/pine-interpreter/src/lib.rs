@@ -46,10 +46,14 @@ fn push_history<O: PineOutput>(
     name: &str,
     value: Value<O>,
 ) {
-    history
-        .entry(name.to_string())
-        .or_default()
-        .push(value, MAX_LOOKBACK);
+    if let Some(buf) = history.get_mut(name) {
+        buf.push(value, MAX_LOOKBACK);
+    } else {
+        history
+            .entry(name.to_string())
+            .or_default()
+            .push(value, MAX_LOOKBACK);
+    }
 }
 
 /// Apply a numeric binary operator under Pine's int/float rule (see [`Num`]).
@@ -791,14 +795,15 @@ impl<O: PineOutput> Interpreter<O> {
         &self.exports
     }
 
-    /// Execute a program with a single bar
-    pub fn execute(&mut self, program: &Program) -> Result<O, RuntimeError> {
+    /// Execute a program with a single bar without cloning the output.
+    pub fn execute_bar(&mut self, program: &Program) -> Result<(), RuntimeError> {
         // Clear output from previous iteration
         self.output.clear();
         // A new bar: stateful builtins may advance their state again.
         self.bar_seq += 1;
 
-        for advance in self.per_bar_advances.clone() {
+        for i in 0..self.per_bar_advances.len() {
+            let advance = self.per_bar_advances[i].clone();
             advance(self);
         }
 
@@ -806,11 +811,17 @@ impl<O: PineOutput> Interpreter<O> {
             self.execute_stmt(stmt)?;
         }
 
-        for advance in self.per_bar_post_advances.clone() {
+        for i in 0..self.per_bar_post_advances.len() {
+            let advance = self.per_bar_post_advances[i].clone();
             advance(self);
         }
 
-        // Return a clone of the output
+        Ok(())
+    }
+
+    /// Execute a program with a single bar
+    pub fn execute(&mut self, program: &Program) -> Result<O, RuntimeError> {
+        self.execute_bar(program)?;
         Ok(self.output.clone())
     }
 
